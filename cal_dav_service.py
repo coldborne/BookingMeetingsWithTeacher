@@ -8,9 +8,13 @@ from pytz import timezone
 
 from consts import WORK_CALENDAR, STUDENT_WORK_CALENDAR
 
+logger = logging.getLogger(__name__)
+
 
 class CalDavService:
     def __init__(self, url: str, username: str, app_password: str):
+        logger.info("Инициализация CalDavService")
+
         self.__url = url
         self.__username = username
         self.__app_password = app_password
@@ -20,28 +24,46 @@ class CalDavService:
         self.__principal.calendars()
         self.__calendars = self.__get_calendars()
 
-    def get_events(self, start_datetime: datetime, end_datetime: datetime) -> list:
+        logger.info("CalDavService успешно инициализирован")
+
+    def get_events(self, start_datetime: datetime, end_datetime: datetime, local_tz) -> list:
+        logger.info(f"Получение событий с {start_datetime} по {end_datetime} в timezone: {local_tz}")
+
         work_calendar = self.__calendars['work']
         student_work_calendar = self.__calendars['student_work']
+
+        # Переводим время из UTC в локальное время
+        start_local = start_datetime.astimezone(local_tz)
+        end_local = end_datetime.astimezone(local_tz)
+
+        logger.info(f"Перевод времени в локальную timezone: {start_local} - {end_local}")
 
         events = []
 
         try:
-            events += work_calendar.date_search(start=start_datetime, end=end_datetime)
-            events += student_work_calendar.date_search(start=start_datetime, end=end_datetime)
+            # Выполняем поиск событий с учетом локального времени
+            events += work_calendar.date_search(start=start_local, end=end_local)
+            events += student_work_calendar.date_search(start=start_local, end=end_local)
+            logger.info(f"Получено {len(events)} событий")
         except Exception as e:
-            print(f"Ошибка при получении событий: {e}")
+            logger.error(f"Ошибка при получении событий: {e}")
 
         return events
 
     def get_events_time_by_date(self, target_date: date) -> list:
         local_tz = timezone("Europe/Moscow")
+
         utc = timezone("UTC")
 
-        start_datetime = local_tz.localize(datetime.combine(target_date, datetime.min.time())).astimezone(utc)
-        end_datetime = local_tz.localize(datetime.combine(target_date, datetime.max.time())).astimezone(utc)
+        # Формируем диапазон времени 10:00–18:00 в UTC
+        start_datetime = utc.localize(
+            datetime.combine(target_date, datetime.min.time()).replace(hour=7))
+        end_datetime = utc.localize(
+            datetime.combine(target_date, datetime.min.time()).replace(hour=15))
 
-        return self.get_events(start_datetime, end_datetime)
+        logger.info(f"Диапазон времени (UTC): {start_datetime} - {end_datetime}")
+
+        return self.get_events(start_datetime, end_datetime, timezone("Europe/Moscow"))
 
     async def book_slot(self, summary, start, end, description=None):
         """
@@ -56,6 +78,10 @@ class CalDavService:
         Returns:
             bool: True, если событие успешно создано, иначе False.
         """
+
+        logger.info(
+            f"Бронирование слота: summary={summary}, время начало={start}, время конца={end}, описание={description}")
+
         try:
             local_tz = timezone("Europe/Moscow")
 
@@ -65,7 +91,7 @@ class CalDavService:
             work_calendar = self.__calendars['work']
             student_work_calendar = self.__calendars['student_work']
 
-            events = self.get_events(start, end)
+            events = self.get_events(start, end, local_tz)
 
             for event in events:
                 event_data = Calendar.from_ical(event.data)
@@ -79,6 +105,8 @@ class CalDavService:
                         existing_end = existing_end.astimezone(local_tz)
 
                     if existing_start < local_end and existing_end > local_start:
+                        logger.warning(f"Конфликт слотов: {existing_start} - {existing_end}")
+
                         return False
 
             event = Event()
@@ -94,9 +122,12 @@ class CalDavService:
             calendar_data.add_component(event)
 
             student_work_calendar.add_event(calendar_data.to_ical())
+            logger.info(f"Слот успешно забронирован: {local_start} - {local_end}")
+
             return True
         except Exception as e:
-            print(f"Ошибка при создании события: {e}")
+            logger.error(f"Ошибка при создании события: {e}")
+
             return False
 
     '''def print_events(self):
@@ -136,7 +167,8 @@ class CalDavService:
                 print('-------------------------')
     '''
 
-    def parse_calendar_events(self, events: list) -> Set[int]:
+    def parse_calendar_events(self, events: list) -> Set[range]:
+        logger.info(f"Преобразование {len(events)} событий в занятое время")
         busy_hours = set()
 
         for event in events:
@@ -148,12 +180,17 @@ class CalDavService:
 
                     if isinstance(start, datetime) and isinstance(end, datetime):
                         busy_hours.update(range(start.hour, end.hour))
+                        logger.info(f"Преобразование события: {start} - {end}")
             except Exception as e:
-                print(f"Ошибка при парсинге события: {e}")
+                logger.error(f"Ошибка при парсинге события: {e}")
+
+        logger.info(f"Занятые часы: {busy_hours}")
 
         return busy_hours
 
     def __get_calendars(self) -> dict[str, caldav.Calendar]:
+        logger.info("Получение календарей")
+
         calendars = dict()
 
         calendars['work'] = self.__principal.calendar(name=WORK_CALENDAR.get_name(),
@@ -162,5 +199,7 @@ class CalDavService:
         calendars['student_work'] = self.__principal.calendar(name=STUDENT_WORK_CALENDAR.get_name(),
                                                               cal_id=STUDENT_WORK_CALENDAR.get_id(),
                                                               cal_url=STUDENT_WORK_CALENDAR.get_url())
+
+        logger.info("Календари успешно получены")
 
         return calendars
