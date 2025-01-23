@@ -34,7 +34,6 @@ class CalDavService:
         work_calendar = self.__calendars['work']
         student_work_calendar = self.__calendars['student_work']
 
-        # Переводим время из UTC в локальное время
         start_local = start_datetime.astimezone(local_tz)
         end_local = end_datetime.astimezone(local_tz)
 
@@ -43,7 +42,6 @@ class CalDavService:
         events = []
 
         try:
-            # Выполняем поиск событий с учетом локального времени
             events += work_calendar.date_search(start=start_local, end=end_local)
             events += student_work_calendar.date_search(start=start_local, end=end_local)
             logger.info(f"Получено {len(events)} событий")
@@ -57,7 +55,6 @@ class CalDavService:
 
         utc = timezone("UTC")
 
-        # Формируем диапазон времени 10:00–18:00 в UTC
         start_datetime = utc.localize(
             datetime.combine(target_date, datetime.min.time()).replace(hour=7))
         end_datetime = utc.localize(
