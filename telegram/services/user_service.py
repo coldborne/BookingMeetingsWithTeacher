@@ -1,9 +1,10 @@
-import logging
 import hashlib
 from sqlalchemy.orm import Session
-from models import User, UserDTO
 
-logger = logging.getLogger(__name__)
+from telegram.config.logging_config import get_logger
+from telegram.models.models import User, UserDTO
+
+logger = get_logger(__name__)
 
 
 class UserService:

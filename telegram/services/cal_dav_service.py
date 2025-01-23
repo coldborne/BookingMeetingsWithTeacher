@@ -1,3 +1,5 @@
+import logging
+
 import caldav
 import uuid
 
@@ -6,7 +8,7 @@ from icalendar import Calendar, Event
 from typing import Set
 from pytz import timezone
 
-from consts import WORK_CALENDAR, STUDENT_WORK_CALENDAR
+from telegram.config.consts import WORK_CALENDAR, STUDENT_WORK_CALENDAR
 
 logger = logging.getLogger(__name__)
 
@@ -51,7 +53,7 @@ class CalDavService:
         return events
 
     def get_events_time_by_date(self, target_date: date) -> list:
-        local_tz = timezone("Europe/Moscow")
+        logger.info(f"Получение событий на дату: {target_date}")
 
         utc = timezone("UTC")
 
@@ -140,7 +142,7 @@ class CalDavService:
         end_date = utc.localize(datetime.now() + timedelta(days=5)).astimezone(local_tz)
 
         # Поиск событий в указанном диапазоне
-        events = calendar.date_search(start=start_date, end=end_date)
+        events = calendar.search(start=start_date, end=end_date)
 
         if not events:
             print("События не найдены.")
