@@ -54,6 +54,7 @@ Telegram Booking Bot with CalDAV Integration — это телеграм-бот 
    python telegram_bot.py
 
 Структура проекта
+```
 .
 ├── .venv/
 ├── telegram/
@@ -80,6 +81,7 @@ Telegram Booking Bot with CalDAV Integration — это телеграм-бот 
 │   │   ├── consts.py
 │   │   ├── logging_config.py
 ├── main.py
+```
 
 Как использовать
 1. Запустите бота.
