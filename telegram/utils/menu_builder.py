@@ -1,5 +1,5 @@
 from calendar import monthrange
-from datetime import date
+from datetime import date, timedelta
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.utils.callback_data import CallbackData
 
@@ -75,7 +75,13 @@ class MenuBuilder:
 
     @staticmethod
     def generate_calendar_keyboard(year: int, month: int) -> InlineKeyboardMarkup:
-        """Создаёт календарь для выбора даты."""
+        """
+        Создаёт календарь для выбора даты с ограничением: текущая дата + 1 месяц.
+        Недоступные даты отображаются с красным крестом (❌).
+        """
+        today = date.today()
+        last_available_date = today + timedelta(days=30)  # Ограничение в месяц вперёд
+
         inline_keyboard = [[InlineKeyboardButton(text=day, callback_data=CallbackData.IGNORE.value) for day in
                             MenuBuilder.__WEEK_DAYS]]
 
@@ -85,26 +91,44 @@ class MenuBuilder:
         buttons = [InlineKeyboardButton(text=" ", callback_data=CallbackData.IGNORE.value)] * first_day
 
         for day in range(1, days_in_month + 1):
-            buttons.append(
-                InlineKeyboardButton(text=str(day), callback_data=CallbackData.date(year, month, day))
-            )
+            current_date = date(year, month, day)
+
+            if today <= current_date <= last_available_date:
+                # Доступная дата
+                callback_data = CallbackData.date(year, month, day)
+                buttons.append(InlineKeyboardButton(text=str(day), callback_data=callback_data))
+            else:
+                # Недоступная дата
+                buttons.append(InlineKeyboardButton(text=f"❌ {day}", callback_data=CallbackData.IGNORE.value))
 
         for row_number in range(0, len(buttons), len(MenuBuilder.__WEEK_DAYS)):
             inline_keyboard.append(buttons[row_number:row_number + len(MenuBuilder.__WEEK_DAYS)])
 
         previous_month, previous_year = (month - 1, year) if month > MenuBuilder.__FIRST_MONTH_NUMBER else (
             MenuBuilder.__LAST_MONTH_NUMBER, year - 1)
-
         next_month, next_year = (month + 1, year) if month < MenuBuilder.__LAST_MONTH_NUMBER else (
             MenuBuilder.__FIRST_MONTH_NUMBER, year + 1)
 
-        inline_keyboard.append([
-            InlineKeyboardButton(text=MenuBuilder.__BACK_BUTTON_TEXT,
-                                 callback_data=CallbackData.month(previous_year, previous_month)),
-            InlineKeyboardButton(text=MenuBuilder.__DATE_FORMAT_TEXT.format(year=year, month=month),
-                                 callback_data=CallbackData.IGNORE.value),
-            InlineKeyboardButton(text=MenuBuilder.__FORWARD_BUTTON_TEXT,
-                                 callback_data=CallbackData.month(next_year, next_month)),
-        ])
+        # Блокируем переход на недоступные месяцы
+        allow_previous = today.month == month and today.year == year
+        allow_next = (last_available_date.month == month and last_available_date.year == year)
 
+        navigation_buttons = [
+            InlineKeyboardButton(
+                text=MenuBuilder.__BACK_BUTTON_TEXT,
+                callback_data=CallbackData.month(previous_year, previous_month)
+                if not allow_previous else CallbackData.IGNORE.value
+            ),
+            InlineKeyboardButton(
+                text=MenuBuilder.__DATE_FORMAT_TEXT.format(year=year, month=month),
+                callback_data=CallbackData.IGNORE.value
+            ),
+            InlineKeyboardButton(
+                text=MenuBuilder.__FORWARD_BUTTON_TEXT,
+                callback_data=CallbackData.month(next_year, next_month)
+                if not allow_next else CallbackData.IGNORE.value
+            )
+        ]
+
+        inline_keyboard.append(navigation_buttons)
         return InlineKeyboardMarkup(inline_keyboard=inline_keyboard)
