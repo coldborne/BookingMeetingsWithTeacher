@@ -124,8 +124,8 @@ class CalDavService:
             logger.info(f"Слот успешно забронирован: {local_start} - {local_end}")
 
             return True
-        except Exception as e:
-            logger.error(f"Ошибка при создании события: {e}")
+        except Exception as exception:
+            logger.error(f"Ошибка при создании события: {exception}")
 
             return False
 
@@ -173,6 +173,7 @@ class CalDavService:
         for event in events:
             try:
                 parsed_event = Calendar.from_ical(event.data)
+
                 for component in parsed_event.walk('VEVENT'):
                     start = component.get('DTSTART').dt
                     end = component.get('DTEND').dt
@@ -180,8 +181,8 @@ class CalDavService:
                     if isinstance(start, datetime) and isinstance(end, datetime):
                         busy_hours.update(range(start.hour, end.hour))
                         logger.info(f"Преобразование события: {start} - {end}")
-            except Exception as e:
-                logger.error(f"Ошибка при парсинге события: {e}")
+            except Exception as exception:
+                logger.error(f"Ошибка при парсинге события: {exception}")
 
         logger.info(f"Занятые часы: {busy_hours}")
 
