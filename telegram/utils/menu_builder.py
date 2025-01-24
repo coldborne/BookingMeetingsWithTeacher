@@ -79,8 +79,8 @@ class MenuBuilder:
         Создаёт календарь для выбора даты с ограничением: текущая дата + 1 месяц.
         Недоступные даты отображаются с красным крестом (❌).
         """
-        today = date.today()
-        last_available_date = today + timedelta(days=30)  # Ограничение в месяц вперёд
+        start_available_date = date.today() + timedelta(days=1)
+        end_available_date = start_available_date + timedelta(days=30)  # Ограничение в месяц вперёд
 
         inline_keyboard = [[InlineKeyboardButton(text=day, callback_data=CallbackData.IGNORE.value) for day in
                             MenuBuilder.__WEEK_DAYS]]
@@ -93,7 +93,7 @@ class MenuBuilder:
         for day in range(1, days_in_month + 1):
             current_date = date(year, month, day)
 
-            if today <= current_date <= last_available_date:
+            if start_available_date <= current_date <= end_available_date:
                 # Доступная дата
                 callback_data = CallbackData.date(year, month, day)
                 buttons.append(InlineKeyboardButton(text=str(day), callback_data=callback_data))
@@ -110,8 +110,8 @@ class MenuBuilder:
             MenuBuilder.__FIRST_MONTH_NUMBER, year + 1)
 
         # Блокируем переход на недоступные месяцы
-        allow_previous = today.month == month and today.year == year
-        allow_next = (last_available_date.month == month and last_available_date.year == year)
+        allow_previous = start_available_date.month == month and start_available_date.year == year
+        allow_next = (end_available_date.month == month and end_available_date.year == year)
 
         navigation_buttons = [
             InlineKeyboardButton(
