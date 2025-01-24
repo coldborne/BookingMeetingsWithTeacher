@@ -164,6 +164,20 @@ async def select_date(callback_query: types.CallbackQuery, state: FSMContext):
     _, year, month, day = callback_query.data.split("_")
     selected_date = date(int(year), int(month), int(day))
 
+    today = date.today()
+    start_available_date = today + timedelta(days=1)
+    end_available_date = start_available_date + timedelta(days=30)
+
+    if not (start_available_date <= selected_date <= end_available_date):
+        keyboard = MenuBuilder.generate_calendar_keyboard(today.year, today.month)
+
+        await callback_query.message.edit_text(
+            f"Выбранная дата ({selected_date}) недоступна. Пожалуйста, выберите актуальную дату:",
+            reply_markup=keyboard
+        )
+
+        return
+
     await state.update_data(selected_date=str(selected_date))
 
     busy_hours = calDavService.parse_calendar_events(
