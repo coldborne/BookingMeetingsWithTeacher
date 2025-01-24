@@ -175,6 +175,20 @@ async def select_date(callback_query: types.CallbackQuery, state: FSMContext):
     await bot.send_message(callback_query.from_user.id, "Выберите время:", reply_markup=keyboard)
 
 
+@router.callback_query(lambda c: c.data.startswith(CallbackData.MONTH_PREFIX.value))
+async def change_month(callback_query: types.CallbackQuery):
+    """
+    Обрабатывает навигацию по месяцам в календаре.
+    """
+    _, year, month = callback_query.data.split("_")
+    year, month = int(year), int(month)
+
+    # Генерация новой клавиатуры для выбранного месяца
+    keyboard = MenuBuilder.generate_calendar_keyboard(year, month)
+
+    await callback_query.message.edit_text("Выберите дату:", reply_markup=keyboard)
+
+
 @router.callback_query(lambda c: c.data.startswith(CallbackData.TIME_PREFIX.value))
 async def select_time(callback_query: types.CallbackQuery, state: FSMContext, database: Session = next(get_database())):
     """
