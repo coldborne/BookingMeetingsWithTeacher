@@ -1,7 +1,11 @@
 from calendar import monthrange
 from datetime import date, timedelta
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+
+from telegram.config.availability_days_config import AvailabilityDaysConfig
 from telegram.utils.callback_data import CallbackData
+
+availability_config = AvailabilityDaysConfig()
 
 
 class MenuBuilder:
@@ -26,6 +30,8 @@ class MenuBuilder:
     __IN_WEEK_DAYS_COUNT = 7
     __FIRST_MONTH_NUMBER = 1
     __LAST_MONTH_NUMBER = 12
+
+    __IN_BUTTON_SYMBOL_COUNT = 4
 
     @staticmethod
     def generate_main_menu() -> InlineKeyboardMarkup:
@@ -82,8 +88,10 @@ class MenuBuilder:
         start_available_date = date.today() + timedelta(days=1)
         end_available_date = start_available_date + timedelta(days=30)  # Ограничение в месяц вперёд
 
-        inline_keyboard = [[InlineKeyboardButton(text=day, callback_data=CallbackData.IGNORE.value) for day in
-                            MenuBuilder.__WEEK_DAYS]]
+        inline_keyboard = [[InlineKeyboardButton(
+            text=day.center(MenuBuilder.__IN_BUTTON_SYMBOL_COUNT),
+            callback_data=CallbackData.IGNORE.value
+        ) for day in MenuBuilder.__WEEK_DAYS]]
 
         _, days_in_month = monthrange(year, month)
         first_day = date(year, month, 1).weekday()
@@ -93,23 +101,37 @@ class MenuBuilder:
         for day in range(1, days_in_month + 1):
             current_date = date(year, month, day)
 
-            if start_available_date <= current_date <= end_available_date:
-                # Доступная дата
+            if start_available_date <= current_date <= end_available_date and not availability_config.is_date_blocked(
+                    current_date):
                 callback_data = CallbackData.date(year, month, day)
-                buttons.append(InlineKeyboardButton(text=str(day), callback_data=callback_data))
+                buttons.append(InlineKeyboardButton(
+                    text=f"{day:2}".center(MenuBuilder.__IN_BUTTON_SYMBOL_COUNT),
+                    callback_data=callback_data
+                ))
             else:
-                # Недоступная дата
-                buttons.append(InlineKeyboardButton(text=f"❌ {day}", callback_data=CallbackData.IGNORE.value))
+                buttons.append(InlineKeyboardButton(
+                    text=f"❌ {day}".center(MenuBuilder.__IN_BUTTON_SYMBOL_COUNT),
+                    callback_data=CallbackData.IGNORE.value
+                ))
 
         for row_number in range(0, len(buttons), len(MenuBuilder.__WEEK_DAYS)):
-            inline_keyboard.append(buttons[row_number:row_number + len(MenuBuilder.__WEEK_DAYS)])
+            current_row = buttons[row_number:row_number + len(MenuBuilder.__WEEK_DAYS)]
+            inline_keyboard.append(current_row)
+
+            row_buttons_count = len(current_row)
+
+            if row_buttons_count < len(MenuBuilder.__WEEK_DAYS):
+                missing_buttons = len(MenuBuilder.__WEEK_DAYS) - row_buttons_count
+                current_row.extend(
+                    [InlineKeyboardButton(text="".center(MenuBuilder.__IN_BUTTON_SYMBOL_COUNT),
+                                          callback_data=CallbackData.IGNORE.value)] * missing_buttons
+                )
 
         previous_month, previous_year = (month - 1, year) if month > MenuBuilder.__FIRST_MONTH_NUMBER else (
             MenuBuilder.__LAST_MONTH_NUMBER, year - 1)
         next_month, next_year = (month + 1, year) if month < MenuBuilder.__LAST_MONTH_NUMBER else (
             MenuBuilder.__FIRST_MONTH_NUMBER, year + 1)
 
-        # Блокируем переход на недоступные месяцы
         allow_previous = start_available_date.month == month and start_available_date.year == year
         allow_next = (end_available_date.month == month and end_available_date.year == year)
 
