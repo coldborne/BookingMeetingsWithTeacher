@@ -6,7 +6,7 @@ class CallbackData(Enum):
     BOOK_EVENT = "book_event"
     UPDATE_DATA = "update_data"
     LANGUAGE_PYTHON = "language_python"
-    LANGUAGE_CSHARP = "language_csharp"
+    LANGUAGE_CSHARP = "language_C#"
     FINISH_BOOKING = "finish_booking"
     IGNORE = "ignore"
     TIME_PREFIX = "time_"
