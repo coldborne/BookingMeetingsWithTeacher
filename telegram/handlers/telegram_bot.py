@@ -16,7 +16,8 @@ from telegram.models.database import SessionLocal
 from telegram.config.logging_config import get_logger
 from telegram.services.user_service import UserService
 from telegram.utils.callback_data import CallbackData
-from telegram.utils.menu_builder import MenuBuilder, availability_config
+from telegram.utils.menu_builder import MenuBuilder
+from telegram.config.availability_days_config import AvailabilityDaysConfig
 
 logger = get_logger(__name__)
 
@@ -26,7 +27,7 @@ dispatcher = Dispatcher(storage=storage)
 router = Router()
 
 calDavService = CalDavService(URL, USERNAME, APPLE_APP_PASSWORD)
-
+availability_days_config = AvailabilityDaysConfig()
 
 class UserStates(StatesGroup):
     idle = State()
@@ -168,7 +169,7 @@ async def select_date(callback_query: types.CallbackQuery, state: FSMContext):
     start_available_date = today + timedelta(days=1)
     end_available_date = start_available_date + timedelta(days=30)
 
-    if not (start_available_date <= selected_date <= end_available_date) or availability_config.is_date_blocked(
+    if not (start_available_date <= selected_date <= end_available_date) or availability_days_config.is_date_blocked(
             selected_date):
         keyboard = MenuBuilder.generate_calendar_keyboard(today.year, today.month)
 
