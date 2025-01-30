@@ -222,7 +222,7 @@ async def select_time(callback_query: types.CallbackQuery, state: FSMContext, da
     local_tz = timezone("Europe/Moscow")
     selected_date = datetime.strptime((await state.get_data())["selected_date"], "%Y-%m-%d").date()
 
-    start_time_local = datetime.combine(selected_date, datetime.min.time()).replace(hour=hour, tzinfo=local_tz)
+    start_time_local = local_tz.localize(datetime.combine(selected_date, datetime.min.time().replace(hour=hour)))
 
     start_time = start_time_local.astimezone(timezone("UTC"))
     end_time = (start_time_local + timedelta(hours=1)).astimezone(timezone("UTC"))
