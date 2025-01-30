@@ -57,6 +57,18 @@ class MenuBuilder:
         )
 
     @staticmethod
+    def generate_confirmation_keyboard() -> InlineKeyboardMarkup:
+        """Создаёт клавиатуру для подтверждения изменений."""
+        return InlineKeyboardMarkup(
+            inline_keyboard=[
+                [
+                    InlineKeyboardButton(text="✅ Да, сохранить", callback_data="confirm_changes"),
+                    InlineKeyboardButton(text="❌ Нет, изменить", callback_data="reject_changes"),
+                ]
+            ]
+        )
+
+    @staticmethod
     def generate_hours_keyboard(events: list[int]) -> InlineKeyboardMarkup:
         """Создаёт клавиатуру для выбора времени."""
         hours = range(MenuBuilder.__START_DAY_HOUR, MenuBuilder.__END_DAY_HOUR)
