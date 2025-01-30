@@ -13,6 +13,7 @@ class UserDataStates(StatesGroup):
     waiting_for_name = State()
     waiting_for_surname = State()
     waiting_for_language = State()
+    confirming_changes = State()
 
 
 class UserDataHandler:
