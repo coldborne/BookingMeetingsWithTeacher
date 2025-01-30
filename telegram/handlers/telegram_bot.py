@@ -91,7 +91,8 @@ async def help_command(message: types.Message):
         "ℹ️ *Помощь по боту бронирования занятий*\n\n"
         "📌 *Доступные команды:*\n"
         "  `/start` \\- Начать работу с ботом\n"
-        "  `/help` \\- Получить справочную информацию\n\n"
+        "  `/help` \\- Получить справочную информацию\n"
+        "  `/change_data` или пункт меню 'Изменить данные' \\- Изменить свои данные\n\n"
         "🗓 *Как работает бронирование?*\n"
         "1️⃣ Выберите доступную дату в календаре\\. НЕдоступные даты отмечаются знаком ❌, их выбор недоступен\\.\n"
         "2️⃣ Выберите удобное время для занятия\\. Доступные часы отмечены \\- 🟢, недоступные \\- 🔴\\.\n"
@@ -110,8 +111,23 @@ async def help_command(message: types.Message):
     await message.answer(help_text, parse_mode="MarkdownV2")
 
 
+@router.message(Command(str(CallbackData.UPDATE_DATA.value)))
+@router.callback_query(lambda c: c.data == "change_data")
+async def change_data_command(event: types.Message | types.CallbackQuery, state: FSMContext):
+    """
+    Запускает процесс изменения всех данных пользователя.
+    """
+    await state.update_data(new_name=None, new_surname=None, new_language=None)
+    await state.set_state(UserDataStates.waiting_for_name)
+
+    if isinstance(event, types.Message):
+        await event.answer("Введите ваше новое имя:")
+    elif isinstance(event, types.CallbackQuery):
+        await event.message.edit_text("Введите ваше новое имя:")
+
+
 @router.message(UserDataStates.waiting_for_name)
-async def process_name(message: types.Message, state: FSMContext, database: Session = next(get_database())):
+async def process_name(message: types.Message, state: FSMContext):
     """
     Обрабатывает ввод имени пользователя.
     """
@@ -121,16 +137,13 @@ async def process_name(message: types.Message, state: FSMContext, database: Sess
         await message.answer("Имя не может быть пустым. Пожалуйста, введите имя:")
         return
 
-    user_service = UserService(database, secret_salt=SECRET_SALT)
-    user_data_handler = UserDataHandler(user_service, message.from_user.id)
-    user_data_handler.update_user_data(name=name)
-
+    await state.update_data(new_name=name)
     await state.set_state(UserDataStates.waiting_for_surname)
     await message.answer("Имя сохранено. Теперь введите вашу фамилию:")
 
 
 @router.message(UserDataStates.waiting_for_surname)
-async def process_surname(message: types.Message, state: FSMContext, database: Session = next(get_database())):
+async def process_surname(message: types.Message, state: FSMContext):
     """
     Обрабатывает ввод фамилии пользователя.
     """
@@ -140,10 +153,7 @@ async def process_surname(message: types.Message, state: FSMContext, database: S
         await message.answer("Фамилия не может быть пустой. Пожалуйста, введите фамилию:")
         return
 
-    user_service = UserService(database, secret_salt=SECRET_SALT)
-    user_data_handler = UserDataHandler(user_service, message.from_user.id)
-    user_data_handler.update_user_data(surname=surname)
-
+    await state.update_data(new_surname=surname)
     await state.set_state(UserDataStates.waiting_for_language)
     await message.answer(
         "Фамилия сохранена. Теперь выберите ваш язык программирования:",
@@ -152,21 +162,53 @@ async def process_surname(message: types.Message, state: FSMContext, database: S
 
 
 @router.callback_query(UserDataStates.waiting_for_language)
-async def process_language(callback_query: types.CallbackQuery, state: FSMContext,
-                           database: Session = next(get_database())):
+async def process_language(callback_query: types.CallbackQuery, state: FSMContext):
     """
     Обрабатывает выбор языка программирования.
     """
     language = callback_query.data.split("_")[1]
+    await state.update_data(new_language=language)
+
+    user_data = await state.get_data()
+    name, surname, language = user_data["new_name"], user_data["new_surname"], user_data["new_language"]
+
+    confirm_keyboard = MenuBuilder.generate_confirmation_keyboard()
+
+    await state.set_state(UserDataStates.confirming_changes)
+    await callback_query.message.edit_text(
+        f"Вы ввели следующие данные:\n\n"
+        f"📝 Имя: {name}\n"
+        f"📝 Фамилия: {surname}\n"
+        f"📝 Язык программирования: {language}\n\n"
+        f"Вы уверены, что хотите сохранить эти данные?",
+        reply_markup=confirm_keyboard
+    )
+
+
+@router.callback_query(lambda c: c.data == "confirm_changes", UserDataStates.confirming_changes)
+async def confirm_changes(callback_query: types.CallbackQuery, state: FSMContext,
+                          database: Session = next(get_database())):
+    """
+    Подтверждает изменения и обновляет данные пользователя в базе данных.
+    """
+    user_data = await state.get_data()
+    name, surname, language = user_data["new_name"], user_data["new_surname"], user_data["new_language"]
 
     user_service = UserService(database, secret_salt=SECRET_SALT)
-    user_data_handler = UserDataHandler(user_service, callback_query.from_user.id)
-    user_data_handler.update_user_data(language=language)
+    user_service.update_user(callback_query.from_user.id, name=name, surname=surname, language=language)
 
     await state.clear()
-    await callback_query.message.edit_text("Данные успешно сохранены! Выберите действие:")
-    await bot.send_message(callback_query.from_user.id, "Выберите действие:",
-                           reply_markup=MenuBuilder.generate_main_menu())
+    await callback_query.message.edit_text("✅ Данные успешно обновлены! Выберите действие:",
+                                           reply_markup=MenuBuilder.generate_main_menu())
+
+
+@router.callback_query(lambda c: c.data == "reject_changes", UserDataStates.confirming_changes)
+async def reject_changes(callback_query: types.CallbackQuery, state: FSMContext):
+    """
+    Отклоняет изменения и возвращает пользователя к вводу имени.
+    """
+    await state.set_state(UserDataStates.waiting_for_name)
+    await callback_query.message.edit_text("❌ Изменение данных отменено. Введите ваше новое имя:")
 
 
 @router.callback_query(lambda c: c.data == CallbackData.BOOK_EVENT.value)
