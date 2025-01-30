@@ -34,8 +34,8 @@ Telegram Booking Bot with CalDAV Integration — это телеграм-бот 
 
 Установка и запуск
 1. Клонируйте репозиторий:
-   git clone https://github.com/coldborne/telegram-booking-bot.git
-   cd telegram-booking-bot
+   git clone https://github.com/coldborne/BookingMeetingsWithTeacher.git
+   cd BookingMeetingsWithTeacher
 
 2. Создайте виртуальное окружение и установите зависимости:
    python -m venv venv
