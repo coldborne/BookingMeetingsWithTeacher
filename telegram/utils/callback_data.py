@@ -4,7 +4,7 @@ from enum import Enum
 class CallbackData(Enum):
     """Класс, хранящий callback_data для клавиатур."""
     BOOK_EVENT = "book_event"
-    UPDATE_DATA = "update_data"
+    UPDATE_DATA = "change_data"
     LANGUAGE_PYTHON = "language_python"
     LANGUAGE_CSHARP = "language_C#"
     FINISH_BOOKING = "finish_booking"
