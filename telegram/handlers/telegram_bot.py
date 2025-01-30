@@ -1,6 +1,8 @@
 import asyncio
 
 from datetime import date, datetime, timedelta
+
+from pytz import timezone
 from sqlalchemy.orm import Session
 
 from aiogram import Bot, Dispatcher, types, Router
@@ -28,6 +30,7 @@ router = Router()
 
 calDavService = CalDavService(URL, USERNAME, APPLE_APP_PASSWORD)
 availability_days_config = AvailabilityDaysConfig()
+
 
 class UserStates(StatesGroup):
     idle = State()
@@ -143,11 +146,12 @@ async def book_event(callback_query: types.CallbackQuery, state: FSMContext, dat
     """
     user_service = UserService(database, secret_salt=SECRET_SALT)
     user_data_handler = UserDataHandler(user_service, callback_query.from_user.id)
+    user_data_handler.ensure_user_exists()
 
-    missing_state = user_data_handler.get_missing_data_state()
+    is_missing_state = user_data_handler.get_missing_data_state()
 
-    if missing_state:
-        await state.set_state(missing_state)
+    if is_missing_state:
+        await state.set_state(is_missing_state)
         await callback_query.message.edit_text("Ваши данные неполные. Завершите их заполнение.")
         return
 
@@ -213,13 +217,15 @@ async def select_time(callback_query: types.CallbackQuery, state: FSMContext, da
     hour = int(callback_query.data.split("_")[1])
 
     user_service = UserService(database, secret_salt=SECRET_SALT)
-    user_data_handler = UserDataHandler(user_service, callback_query.from_user.id)
     user = user_service.get_user_by_telegram_id(callback_query.from_user.id)
 
+    local_tz = timezone("Europe/Moscow")
     selected_date = datetime.strptime((await state.get_data())["selected_date"], "%Y-%m-%d").date()
 
-    start_time = datetime.combine(selected_date, datetime.min.time()).replace(hour=hour)
-    end_time = start_time + timedelta(hours=1)
+    start_time_local = datetime.combine(selected_date, datetime.min.time()).replace(hour=hour, tzinfo=local_tz)
+
+    start_time = start_time_local.astimezone(timezone("UTC"))
+    end_time = (start_time_local + timedelta(hours=1)).astimezone(timezone("UTC"))
 
     is_success = await calDavService.book_slot(
         summary=f"{user.name} {user.surname} ({user.language})",
