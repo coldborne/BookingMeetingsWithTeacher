@@ -310,12 +310,12 @@ async def select_time(callback_query: types.CallbackQuery, state: FSMContext, da
         end=end_time
     )
 
-    if is_success:
-        busy_hours = calDavService.parse_calendar_events(
-            calDavService.get_events_time_by_date(selected_date)
-        )
-        keyboard = MenuBuilder.generate_hours_keyboard(busy_hours)
+    busy_hours = calDavService.parse_calendar_events(
+        calDavService.get_events_time_by_date(selected_date)
+    )
+    keyboard = MenuBuilder.generate_hours_keyboard(busy_hours)
 
+    if is_success:
         await callback_query.message.edit_text(
             f"Событие успешно забронировано на {selected_date} в {hour}:00.\n"
             f"Выберите следующий слот или закончите бронирование.",
@@ -324,7 +324,7 @@ async def select_time(callback_query: types.CallbackQuery, state: FSMContext, da
     else:
         await callback_query.message.edit_text(
             f"Ошибка: время {hour}:00 уже занято на {selected_date}.",
-            reply_markup=callback_query.message.reply_markup
+            reply_markup=keyboard
         )
 
 
