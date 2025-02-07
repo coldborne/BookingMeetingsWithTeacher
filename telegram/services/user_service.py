@@ -1,27 +1,20 @@
-import hashlib
 from sqlalchemy.exc import IntegrityError
 
 from telegram.config.logging_config import get_logger
 from telegram.models.database import Database
 from telegram.models.models import User, UserDTO
 
+from telegram.utils.cryptographer import encrypt_telegram_id
+
 logger = get_logger(__name__)
 
 
 class UserService:
-    def __init__(self, database: Database, secret_salt: str):
+    def __init__(self, database: Database):
         """
         Инициализирует UserService, используя единственный экземпляр Database.
         """
         self.__database = database
-        self.__salt = secret_salt
-
-    def hash_telegram_id(self, telegram_id: int) -> str:
-        """
-        Хэширует telegram_id с использованием секретной "соли".
-        """
-        hash_input = f"{telegram_id}{self.__salt}".encode('utf-8')
-        return hashlib.sha256(hash_input).hexdigest()
 
     def __to_dto(self, user: User, original_telegram_id: int) -> UserDTO | None:
         """
@@ -46,8 +39,8 @@ class UserService:
         async def query():
             session = await self.__database.get_session()
             try:
-                hashed_id = self.hash_telegram_id(telegram_id)
-                user = session.query(User).filter(User.telegram_id == hashed_id).first()
+                encrypted_id = encrypt_telegram_id(telegram_id)
+                user = session.query(User).filter(User.telegram_id == encrypted_id).first()
                 return self.__to_dto(user, telegram_id)
             finally:
                 await self.__database.close_session()
@@ -61,18 +54,18 @@ class UserService:
 
         async def query():
             session = await self.__database.get_session()
-            hashed_id = None
+            encrypted_id = None
 
             try:
-                hashed_id = self.hash_telegram_id(telegram_id)
-                user = User(telegram_id=hashed_id)
+                encrypted_id = encrypt_telegram_id(telegram_id)
+                user = User(telegram_id=encrypted_id)
                 session.add(user)
                 session.commit()
                 session.refresh(user)
                 return self.__to_dto(user, telegram_id)
             except IntegrityError:
                 session.rollback()
-                logger.warning(f"Пользователь с telegram_id={hashed_id} уже существует")
+                logger.warning(f"Пользователь с telegram_id={encrypted_id} уже существует")
                 return None
             finally:
                 await self.__database.close_session()
@@ -86,9 +79,10 @@ class UserService:
 
         async def query():
             session = await self.__database.get_session()
+
             try:
-                hashed_id = self.hash_telegram_id(telegram_id)
-                user = session.query(User).filter(User.telegram_id == hashed_id).first()
+                encrypted_id = encrypt_telegram_id(telegram_id)
+                user = session.query(User).filter(User.telegram_id == encrypted_id).first()
 
                 if user:
                     for key, value in kwargs.items():
@@ -98,7 +92,7 @@ class UserService:
                     session.refresh(user)
                     return self.__to_dto(user, telegram_id)
                 else:
-                    logger.warning(f"Пользователь с telegram_id={hashed_id} не найден для обновления")
+                    logger.warning(f"Пользователь с telegram_id={encrypted_id} не найден для обновления")
                     return None
             finally:
                 await self.__database.close_session()
@@ -113,8 +107,8 @@ class UserService:
         async def query():
             session = await self.__database.get_session()
             try:
-                hashed_id = self.hash_telegram_id(telegram_id)
-                user = session.query(User).filter(User.telegram_id == hashed_id).first()
+                encrypted_id = encrypt_telegram_id(telegram_id)
+                user = session.query(User).filter(User.telegram_id == encrypted_id).first()
                 return user.state if user else None
             finally:
                 await self.__database.close_session()
