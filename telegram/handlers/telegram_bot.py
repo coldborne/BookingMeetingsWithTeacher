@@ -13,13 +13,15 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.fsm.state import State, StatesGroup
 
-from telegram.config.consts import URL, USERNAME, APPLE_APP_PASSWORD, SECRET_SALT, API_TOKEN
+from telegram.config.consts import URL, USERNAME, APPLE_APP_PASSWORD, API_TOKEN, ADMIN_TELEGRAM_ID
 from telegram.handlers.user_data_handler import UserDataStates, UserDataHandler
 from telegram.models.database import Database
+from telegram.models.models import User
 from telegram.services.cal_dav_service import CalDavService
 from telegram.config.logging_config import get_logger
 from telegram.services.user_service import UserService
 from telegram.utils.callback_data import CallbackData
+from telegram.utils.cryptographer import decrypt_telegram_id
 from telegram.utils.menu_builder import MenuBuilder
 from telegram.config.availability_days_config import AvailabilityDaysConfig
 
@@ -39,7 +41,7 @@ availability_days_config = AvailabilityDaysConfig()
 database = Database()
 asyncio.run(database.connect())
 
-user_service = UserService(database, secret_salt=SECRET_SALT)
+user_service = UserService(database)
 
 
 class UserStates(StatesGroup):
@@ -98,15 +100,16 @@ async def start_command(message: types.Message, state: FSMContext):
     await user_data_handler.ensure_user_exists()
 
     missing_state = await user_data_handler.get_missing_data_state()
+    first_missing_state = missing_state[0]
 
-    if missing_state == UserDataStates.waiting_for_name:
-        await state.set_state(missing_state)
+    if first_missing_state == UserDataStates.waiting_for_name:
+        await state.set_state(first_missing_state)
         await message.answer("Ваши данные неполные. Пожалуйста, введите ваше имя.")
-    elif missing_state == UserDataStates.waiting_for_surname:
-        await state.set_state(missing_state)
+    elif first_missing_state == UserDataStates.waiting_for_surname:
+        await state.set_state(first_missing_state)
         await message.answer("Ваши данные неполные. Пожалуйста, введите вашу фамилию.")
-    elif missing_state == UserDataStates.waiting_for_language:
-        await state.set_state(missing_state)
+    elif first_missing_state == UserDataStates.waiting_for_language:
+        await state.set_state(first_missing_state)
         await message.answer(
             "Ваши данные неполные. Пожалуйста, выберите ваш язык программирования:",
             reply_markup=MenuBuilder.generate_language_keyboard()
@@ -259,11 +262,14 @@ async def book_event(callback_query: types.CallbackQuery, state: FSMContext):
     user_data_handler = UserDataHandler(user_service, callback_query.from_user.id)
     await user_data_handler.ensure_user_exists()
 
-    is_missing_state = await user_data_handler.get_missing_data_state()
+    missing_state, missing_fields, first_missing_label = await user_data_handler.get_missing_data_state()
 
-    if is_missing_state:
-        await state.set_state(is_missing_state)
-        await callback_query.message.edit_text("Ваши данные неполные. Завершите их заполнение.")
+    if missing_state:
+        await state.set_state(missing_state)
+        await callback_query.message.edit_text(
+            f"❌ Ваши данные неполные. Завершите их заполнение.\n"
+            f"✍️ Введите: {first_missing_label}."
+        )
         return
 
     today = date.today()
@@ -378,6 +384,41 @@ async def finish_booking(callback_query: types.CallbackQuery):
         "Выберите действие:",
         reply_markup=MenuBuilder.generate_main_menu()
     )
+
+
+@router.message(Command("send_admin_message"))
+async def send_admin_message(message: types.Message):
+    """
+    Отправляет сообщение от администратора всем активным пользователям.
+    """
+    if message.from_user.id != ADMIN_TELEGRAM_ID:
+        await message.answer("❌ У вас нет прав для выполнения этой команды.")
+        return
+
+    if len(message.text.split(maxsplit=1)) < 2:
+        await message.answer("❌ Пожалуйста, укажите сообщение после команды.\nПример: /send_admin_message Привет всем!")
+        return
+    admin_message = message.text.split(maxsplit=1)[1]
+
+    session = await database.get_session()
+
+    try:
+        active_users = session.query(User).all()
+
+        if not active_users:
+            await message.answer("⚠️ Нет активных пользователей для рассылки сообщения.")
+            return
+
+        for user in active_users:
+            try:
+                await bot.send_message(chat_id=decrypt_telegram_id(user.telegram_id),
+                                       text=f"⚠️⚠️⚠️{admin_message}⚠️⚠️⚠️")
+            except Exception as exception:
+                logger.error(f"Ошибка при отправке сообщения пользователю {user.telegram_id}: {exception}")
+
+        await message.answer("✅ Сообщение успешно отправлено всем активным пользователям.")
+    finally:
+        await database.close_session()
 
 
 async def main():
