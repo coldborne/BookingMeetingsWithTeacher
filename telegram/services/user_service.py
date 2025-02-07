@@ -1,14 +1,18 @@
 import hashlib
-from sqlalchemy.orm import Session
+from sqlalchemy.exc import IntegrityError
 
 from telegram.config.logging_config import get_logger
+from telegram.models.database import Database
 from telegram.models.models import User, UserDTO
 
 logger = get_logger(__name__)
 
 
 class UserService:
-    def __init__(self, database: Session, secret_salt: str):
+    def __init__(self, database: Database, secret_salt: str):
+        """
+        Инициализирует UserService, используя единственный экземпляр Database.
+        """
         self.__database = database
         self.__salt = secret_salt
 
@@ -19,7 +23,7 @@ class UserService:
         hash_input = f"{telegram_id}{self.__salt}".encode('utf-8')
         return hashlib.sha256(hash_input).hexdigest()
 
-    def __to_dto(self, user: User, original_telegram_id: int) -> UserDTO:
+    def __to_dto(self, user: User, original_telegram_id: int) -> UserDTO | None:
         """
         Преобразует SQLAlchemy-модель в DTO с оригинальным telegram_id.
         """
@@ -34,53 +38,91 @@ class UserService:
 
         return None
 
-    def get_user_by_telegram_id(self, telegram_id: int) -> UserDTO:
+    async def get_user_by_telegram_id(self, telegram_id: int) -> UserDTO:
         """
         Получает пользователя из базы данных и возвращает его как DTO.
         """
-        hashed_id = self.hash_telegram_id(telegram_id)
-        user = self.__database.query(User).filter(User.telegram_id == hashed_id).first()
-        return self.__to_dto(user, telegram_id)
 
-    def create_user(self, telegram_id: int) -> UserDTO:
+        async def query():
+            session = await self.__database.get_session()
+            try:
+                hashed_id = self.hash_telegram_id(telegram_id)
+                user = session.query(User).filter(User.telegram_id == hashed_id).first()
+                return self.__to_dto(user, telegram_id)
+            finally:
+                await self.__database.close_session()
+
+        return await self.__database.execute_with_retry(query)
+
+    async def create_user(self, telegram_id: int) -> UserDTO | None:
         """
         Создает нового пользователя в базе данных и возвращает его как DTO.
         """
-        hashed_id = self.hash_telegram_id(telegram_id)
-        user = User(telegram_id=hashed_id)
-        self.__database.add(user)
-        self.__database.commit()
-        self.__database.refresh(user)
-        return self.__to_dto(user, telegram_id)
 
-    def update_user(self, telegram_id: int, **kwargs):
+        async def query():
+            session = await self.__database.get_session()
+            hashed_id = None
+
+            try:
+                hashed_id = self.hash_telegram_id(telegram_id)
+                user = User(telegram_id=hashed_id)
+                session.add(user)
+                session.commit()
+                session.refresh(user)
+                return self.__to_dto(user, telegram_id)
+            except IntegrityError:
+                session.rollback()
+                logger.warning(f"Пользователь с telegram_id={hashed_id} уже существует")
+                return None
+            finally:
+                await self.__database.close_session()
+
+        return await self.__database.execute_with_retry(query)
+
+    async def update_user(self, telegram_id: int, **kwargs):
         """
         Обновляет пользователя в базе данных.
         """
-        hashed_id = self.hash_telegram_id(telegram_id)
-        user = self.__database.query(User).filter(User.telegram_id == hashed_id).first()
 
-        if user:
-            for key, value in kwargs.items():
-                setattr(user, key, value)
+        async def query():
+            session = await self.__database.get_session()
+            try:
+                hashed_id = self.hash_telegram_id(telegram_id)
+                user = session.query(User).filter(User.telegram_id == hashed_id).first()
 
-            self.__database.commit()
-            self.__database.refresh(user)
-            return self.__to_dto(user, telegram_id)
-        else:
-            logger.warning(f"Пользователь с telegram_id={hashed_id} не найден для обновления")
-            return None
+                if user:
+                    for key, value in kwargs.items():
+                        setattr(user, key, value)
 
-    def get_user_state(self, telegram_id: int) -> str:
+                    session.commit()
+                    session.refresh(user)
+                    return self.__to_dto(user, telegram_id)
+                else:
+                    logger.warning(f"Пользователь с telegram_id={hashed_id} не найден для обновления")
+                    return None
+            finally:
+                await self.__database.close_session()
+
+        return await self.__database.execute_with_retry(query)
+
+    async def get_user_state(self, telegram_id: int) -> str:
         """
         Получает состояние пользователя из базы данных.
         """
-        hashed_id = self.hash_telegram_id(telegram_id)
-        user = self.__database.query(User).filter(User.telegram_id == hashed_id).first()
-        return user.state if user else None
 
-    def set_user_state(self, telegram_id: int, state: str):
+        async def query():
+            session = await self.__database.get_session()
+            try:
+                hashed_id = self.hash_telegram_id(telegram_id)
+                user = session.query(User).filter(User.telegram_id == hashed_id).first()
+                return user.state if user else None
+            finally:
+                await self.__database.close_session()
+
+        return await self.__database.execute_with_retry(query)
+
+    async def set_user_state(self, telegram_id: int, state: str):
         """
         Устанавливает состояние пользователя в базе данных.
         """
-        self.update_user(telegram_id, state=state)
+        await self.update_user(telegram_id, state=state)
