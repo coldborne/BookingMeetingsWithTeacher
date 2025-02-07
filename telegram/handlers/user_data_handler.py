@@ -42,22 +42,29 @@ class UserDataHandler:
             logger.info(f"Создаём нового пользователя для Telegram ID: {self.telegram_id}")
             self.user = await self.user_service.create_user(self.telegram_id)
 
-    async def get_missing_data_state(self) -> State | None:
+    async def get_missing_data_state(self) -> tuple[State | None, list[str], str | None]:
         """
-        Возвращает состояние для недостающих данных пользователя. Если данные полные, возвращает None.
+        Возвращает состояние для недостающих данных пользователя, их список и первую необходимую характеристику.
         """
         await self.load_user()
 
         if not self.user:
-            return UserDataStates.waiting_for_name  # На случай, если пользователь не загрузился
+            return UserDataStates.waiting_for_name, ["Имя", "Фамилия", "Язык"], "Имя"
 
-        if not self.user.name:
-            return UserDataStates.waiting_for_name
-        if not self.user.surname:
-            return UserDataStates.waiting_for_surname
-        if not self.user.language:
-            return UserDataStates.waiting_for_language
-        return None
+        # Словарь с маппингом полей на состояния и их имена
+        required_fields = {
+            "name": ("Имя", UserDataStates.waiting_for_name),
+            "surname": ("Фамилия", UserDataStates.waiting_for_surname),
+            "language": ("Язык", UserDataStates.waiting_for_language),
+        }
+
+        missing_fields = [label for field, (label, _) in required_fields.items() if not getattr(self.user, field)]
+        first_missing_state = next(
+            ((state, label) for field, (label, state) in required_fields.items() if not getattr(self.user, field)),
+            (None, None)
+        )
+
+        return first_missing_state[0], missing_fields, first_missing_state[1]
 
     async def update_user_data(self, **kwargs):
         """
