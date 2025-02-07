@@ -42,71 +42,84 @@ class UserService:
         """
         Получает пользователя из базы данных и возвращает его как DTO.
         """
-        session = await self.__database.get_session()
 
-        try:
-            hashed_id = self.hash_telegram_id(telegram_id)
-            user = session.query(User).filter(User.telegram_id == hashed_id).first()
-            return self.__to_dto(user, telegram_id)
-        finally:
-            await self.__database.close_session()
+        async def query():
+            session = await self.__database.get_session()
+            try:
+                hashed_id = self.hash_telegram_id(telegram_id)
+                user = session.query(User).filter(User.telegram_id == hashed_id).first()
+                return self.__to_dto(user, telegram_id)
+            finally:
+                await self.__database.close_session()
+
+        return await self.__database.execute_with_retry(query)
 
     async def create_user(self, telegram_id: int) -> UserDTO | None:
         """
         Создает нового пользователя в базе данных и возвращает его как DTO.
         """
-        session = await self.__database.get_session()
-        hashed_id = None
 
-        try:
-            hashed_id = self.hash_telegram_id(telegram_id)
-            user = User(telegram_id=hashed_id)
-            session.add(user)
-            session.commit()
-            session.refresh(user)
-            return self.__to_dto(user, telegram_id)
-        except IntegrityError:
-            session.rollback()
-            logger.warning(f"Пользователь с telegram_id={hashed_id} уже существует")
-            return None
-        finally:
-            await self.__database.close_session()
+        async def query():
+            session = await self.__database.get_session()
+            hashed_id = None
+
+            try:
+                hashed_id = self.hash_telegram_id(telegram_id)
+                user = User(telegram_id=hashed_id)
+                session.add(user)
+                session.commit()
+                session.refresh(user)
+                return self.__to_dto(user, telegram_id)
+            except IntegrityError:
+                session.rollback()
+                logger.warning(f"Пользователь с telegram_id={hashed_id} уже существует")
+                return None
+            finally:
+                await self.__database.close_session()
+
+        return await self.__database.execute_with_retry(query)
 
     async def update_user(self, telegram_id: int, **kwargs):
         """
         Обновляет пользователя в базе данных.
         """
-        session = await self.__database.get_session()
 
-        try:
-            hashed_id = self.hash_telegram_id(telegram_id)
-            user = session.query(User).filter(User.telegram_id == hashed_id).first()
+        async def query():
+            session = await self.__database.get_session()
+            try:
+                hashed_id = self.hash_telegram_id(telegram_id)
+                user = session.query(User).filter(User.telegram_id == hashed_id).first()
 
-            if user:
-                for key, value in kwargs.items():
-                    setattr(user, key, value)
+                if user:
+                    for key, value in kwargs.items():
+                        setattr(user, key, value)
 
-                session.commit()
-                session.refresh(user)
-                return self.__to_dto(user, telegram_id)
-            else:
-                logger.warning(f"Пользователь с telegram_id={hashed_id} не найден для обновления")
-                return None
-        finally:
-            await self.__database.close_session()
+                    session.commit()
+                    session.refresh(user)
+                    return self.__to_dto(user, telegram_id)
+                else:
+                    logger.warning(f"Пользователь с telegram_id={hashed_id} не найден для обновления")
+                    return None
+            finally:
+                await self.__database.close_session()
+
+        return await self.__database.execute_with_retry(query)
 
     async def get_user_state(self, telegram_id: int) -> str:
         """
         Получает состояние пользователя из базы данных.
         """
-        session = await self.__database.get_session()
 
-        try:
-            hashed_id = self.hash_telegram_id(telegram_id)
-            user = session.query(User).filter(User.telegram_id == hashed_id).first()
-            return user.state if user else None
-        finally:
-            await self.__database.close_session()
+        async def query():
+            session = await self.__database.get_session()
+            try:
+                hashed_id = self.hash_telegram_id(telegram_id)
+                user = session.query(User).filter(User.telegram_id == hashed_id).first()
+                return user.state if user else None
+            finally:
+                await self.__database.close_session()
+
+        return await self.__database.execute_with_retry(query)
 
     async def set_user_state(self, telegram_id: int, state: str):
         """
