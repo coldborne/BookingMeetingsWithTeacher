@@ -1,9 +1,11 @@
 import asyncio
+from asyncio import Lock
+from collections import defaultdict
 
 from datetime import date, datetime, timedelta
+from functools import wraps
 
 from pytz import timezone
-from sqlalchemy.orm import Session
 
 from aiogram import Bot, Dispatcher, types, Router
 from aiogram.filters import Command
@@ -13,8 +15,8 @@ from aiogram.fsm.state import State, StatesGroup
 
 from telegram.config.consts import URL, USERNAME, APPLE_APP_PASSWORD, SECRET_SALT, API_TOKEN
 from telegram.handlers.user_data_handler import UserDataStates, UserDataHandler
+from telegram.models.database import Database
 from telegram.services.cal_dav_service import CalDavService
-from telegram.models.database import SessionLocal
 from telegram.config.logging_config import get_logger
 from telegram.services.user_service import UserService
 from telegram.utils.callback_data import CallbackData
@@ -28,8 +30,16 @@ storage = MemoryStorage()
 dispatcher = Dispatcher(storage=storage)
 router = Router()
 
+user_task_locks = defaultdict(Lock)
+user_tasks = defaultdict(set)
+
 calDavService = CalDavService(URL, USERNAME, APPLE_APP_PASSWORD)
 availability_days_config = AvailabilityDaysConfig()
+
+database = Database()
+asyncio.run(database.connect())
+
+user_service = UserService(database, secret_salt=SECRET_SALT)
 
 
 class UserStates(StatesGroup):
@@ -38,16 +48,44 @@ class UserStates(StatesGroup):
     selecting_time = State()
 
 
-def get_database():
-    database = SessionLocal()
-    try:
-        yield database
-    finally:
-        database.close()
+def task_handler(task_key_func=None):
+    """
+    Декоратор для управления задачами пользователя.
+    task_key_func: Функция, которая возвращает уникальный ключ задачи (по умолчанию ID пользователя и имя функции).
+    """
+
+    def decorator(handler):
+        @wraps(handler)
+        async def wrapper(*args, **kwargs):
+            event = args[0]
+            user_id = (
+                event.from_user.id
+                if isinstance(event, types.CallbackQuery) or isinstance(event, types.Message)
+                else None
+            )
+
+            task_key = task_key_func(event, *args, **kwargs) if task_key_func else f"{user_id}_{handler.__name__}"
+
+            if task_key in user_tasks[user_id]:
+                logger.warning(f"Пользователь {user_id} уже выполняет задачу {task_key}. Игнорируем повторный запрос.")
+                return
+
+            user_tasks[user_id].add(task_key)
+
+            async with user_task_locks[user_id]:
+                try:
+                    return await handler(*args, **kwargs)
+                finally:
+                    user_tasks[user_id].remove(task_key)
+
+        return wrapper
+
+    return decorator
 
 
 @router.message(Command("start"))
-async def start_command(message: types.Message, state: FSMContext, database: Session = next(get_database())):
+@task_handler(task_key_func=lambda event, *args, **kwargs: f"{event.from_user.id}_start")
+async def start_command(message: types.Message, state: FSMContext):
     """
     Обрабатывает команду /start: приветствует пользователя, проверяет данные и перенаправляет на заполнение.
     """
@@ -55,12 +93,11 @@ async def start_command(message: types.Message, state: FSMContext, database: Ses
     await message.answer('ВАЖНО! Перед работой с ботом прочитайте подробности работы с ботом через команду /help. '
                          'При продолжении работы с ботом вы автоматически подтверждаете согласие с данными подробностями')
 
-    user_service = UserService(database, secret_salt=SECRET_SALT)
     user_data_handler = UserDataHandler(user_service, message.from_user.id)
 
-    user_data_handler.ensure_user_exists()
+    await user_data_handler.ensure_user_exists()
 
-    missing_state = user_data_handler.get_missing_data_state()
+    missing_state = await user_data_handler.get_missing_data_state()
 
     if missing_state == UserDataStates.waiting_for_name:
         await state.set_state(missing_state)
@@ -191,16 +228,14 @@ async def process_language(callback_query: types.CallbackQuery, state: FSMContex
 
 
 @router.callback_query(lambda c: c.data == "confirm_changes", UserDataStates.confirming_changes)
-async def confirm_changes(callback_query: types.CallbackQuery, state: FSMContext,
-                          database: Session = next(get_database())):
+async def confirm_changes(callback_query: types.CallbackQuery, state: FSMContext):
     """
     Подтверждает изменения и обновляет данные пользователя в базе данных.
     """
     user_data = await state.get_data()
     name, surname, language = user_data["new_name"], user_data["new_surname"], user_data["new_language"]
 
-    user_service = UserService(database, secret_salt=SECRET_SALT)
-    user_service.update_user(callback_query.from_user.id, name=name, surname=surname, language=language)
+    await user_service.update_user(callback_query.from_user.id, name=name, surname=surname, language=language)
 
     await state.clear()
     await callback_query.message.edit_text("✅ Данные успешно обновлены! Выберите действие:",
@@ -217,15 +252,14 @@ async def reject_changes(callback_query: types.CallbackQuery, state: FSMContext)
 
 
 @router.callback_query(lambda c: c.data == CallbackData.BOOK_EVENT.value)
-async def book_event(callback_query: types.CallbackQuery, state: FSMContext, database: Session = next(get_database())):
+async def book_event(callback_query: types.CallbackQuery, state: FSMContext):
     """
     Обрабатывает нажатие на кнопку "Бронировать событие" и отображает календарь.
     """
-    user_service = UserService(database, secret_salt=SECRET_SALT)
     user_data_handler = UserDataHandler(user_service, callback_query.from_user.id)
-    user_data_handler.ensure_user_exists()
+    await user_data_handler.ensure_user_exists()
 
-    is_missing_state = user_data_handler.get_missing_data_state()
+    is_missing_state = await user_data_handler.get_missing_data_state()
 
     if is_missing_state:
         await state.set_state(is_missing_state)
@@ -287,20 +321,19 @@ async def change_month(callback_query: types.CallbackQuery):
 
 
 @router.callback_query(lambda c: c.data.startswith(CallbackData.TIME_PREFIX.value))
-async def select_time(callback_query: types.CallbackQuery, state: FSMContext, database: Session = next(get_database())):
+@task_handler(task_key_func=lambda event, *args, **kwargs: f"{event.from_user.id}_{event.data}")
+async def select_time(callback_query: types.CallbackQuery, state: FSMContext):
     """
     Обрабатывает выбор времени и бронирует слот.
     """
     hour = int(callback_query.data.split("_")[1])
+    user_id = callback_query.from_user.id
 
-    user_service = UserService(database, secret_salt=SECRET_SALT)
-    user = user_service.get_user_by_telegram_id(callback_query.from_user.id)
-
+    user = await user_service.get_user_by_telegram_id(user_id)
     local_tz = timezone("Europe/Moscow")
     selected_date = datetime.strptime((await state.get_data())["selected_date"], "%Y-%m-%d").date()
 
     start_time_local = local_tz.localize(datetime.combine(selected_date, datetime.min.time().replace(hour=hour)))
-
     start_time = start_time_local.astimezone(timezone("UTC"))
     end_time = (start_time_local + timedelta(hours=1)).astimezone(timezone("UTC"))
 
@@ -316,9 +349,12 @@ async def select_time(callback_query: types.CallbackQuery, state: FSMContext, da
     keyboard = MenuBuilder.generate_hours_keyboard(busy_hours)
 
     if is_success:
+        await callback_query.message.answer(
+            f"✅ Событие успешно забронировано на {selected_date} в {hour}:00.\n"
+            f"Выберите следующий слот или закончите бронирование."
+        )
         await callback_query.message.edit_text(
-            f"Событие успешно забронировано на {selected_date} в {hour}:00.\n"
-            f"Выберите следующий слот или закончите бронирование.",
+            "Выберите время:",
             reply_markup=keyboard
         )
     else:
