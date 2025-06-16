@@ -102,13 +102,13 @@ async def start_command(message: types.Message, state: FSMContext):
     missing_state = await user_data_handler.get_missing_data_state()
     first_missing_state = missing_state[0]
 
-    if first_missing_state == UserDataStates.waiting_for_name:
+    if first_missing_state == UserDataStates.WAITING_FOR_NAME:
         await state.set_state(first_missing_state)
         await message.answer("Ваши данные неполные. Пожалуйста, введите ваше имя.")
-    elif first_missing_state == UserDataStates.waiting_for_surname:
+    elif first_missing_state == UserDataStates.WAITING_FOR_SURNAME:
         await state.set_state(first_missing_state)
         await message.answer("Ваши данные неполные. Пожалуйста, введите вашу фамилию.")
-    elif first_missing_state == UserDataStates.waiting_for_language:
+    elif first_missing_state == UserDataStates.WAITING_FOR_LANGUAGE:
         await state.set_state(first_missing_state)
         await message.answer(
             "Ваши данные неполные. Пожалуйста, выберите ваш язык программирования:",
@@ -163,7 +163,7 @@ async def change_data_command(event: types.Message | types.CallbackQuery, state:
     Запускает процесс изменения всех данных пользователя.
     """
     await state.update_data(new_name=None, new_surname=None, new_language=None)
-    await state.set_state(UserDataStates.waiting_for_name)
+    await state.set_state(UserDataStates.WAITING_FOR_NAME)
 
     if isinstance(event, types.Message):
         await event.answer("Введите ваше новое имя:")
@@ -171,7 +171,7 @@ async def change_data_command(event: types.Message | types.CallbackQuery, state:
         await event.message.edit_text("Введите ваше новое имя:")
 
 
-@router.message(UserDataStates.waiting_for_name)
+@router.message(UserDataStates.WAITING_FOR_NAME)
 async def process_name(message: types.Message, state: FSMContext):
     """
     Обрабатывает ввод имени пользователя.
@@ -183,11 +183,11 @@ async def process_name(message: types.Message, state: FSMContext):
         return
 
     await state.update_data(new_name=name)
-    await state.set_state(UserDataStates.waiting_for_surname)
+    await state.set_state(UserDataStates.WAITING_FOR_SURNAME)
     await message.answer("Имя сохранено. Теперь введите вашу фамилию:")
 
 
-@router.message(UserDataStates.waiting_for_surname)
+@router.message(UserDataStates.WAITING_FOR_SURNAME)
 async def process_surname(message: types.Message, state: FSMContext):
     """
     Обрабатывает ввод фамилии пользователя.
@@ -199,14 +199,14 @@ async def process_surname(message: types.Message, state: FSMContext):
         return
 
     await state.update_data(new_surname=surname)
-    await state.set_state(UserDataStates.waiting_for_language)
+    await state.set_state(UserDataStates.WAITING_FOR_LANGUAGE)
     await message.answer(
         "Фамилия сохранена. Теперь выберите ваш язык программирования:",
         reply_markup=MenuBuilder.generate_language_keyboard()
     )
 
 
-@router.callback_query(UserDataStates.waiting_for_language)
+@router.callback_query(UserDataStates.WAITING_FOR_LANGUAGE)
 async def process_language(callback_query: types.CallbackQuery, state: FSMContext):
     """
     Обрабатывает выбор языка программирования.
@@ -219,7 +219,7 @@ async def process_language(callback_query: types.CallbackQuery, state: FSMContex
 
     confirm_keyboard = MenuBuilder.generate_confirmation_keyboard()
 
-    await state.set_state(UserDataStates.confirming_changes)
+    await state.set_state(UserDataStates.CONFIRMING_CHANGES)
     await callback_query.message.edit_text(
         f"Вы ввели следующие данные:\n\n"
         f"📝 Имя: {name}\n"
@@ -230,7 +230,7 @@ async def process_language(callback_query: types.CallbackQuery, state: FSMContex
     )
 
 
-@router.callback_query(lambda c: c.data == "confirm_changes", UserDataStates.confirming_changes)
+@router.callback_query(lambda c: c.data == "confirm_changes", UserDataStates.CONFIRMING_CHANGES)
 async def confirm_changes(callback_query: types.CallbackQuery, state: FSMContext):
     """
     Подтверждает изменения и обновляет данные пользователя в базе данных.
@@ -245,12 +245,12 @@ async def confirm_changes(callback_query: types.CallbackQuery, state: FSMContext
                                            reply_markup=MenuBuilder.generate_main_menu())
 
 
-@router.callback_query(lambda c: c.data == "reject_changes", UserDataStates.confirming_changes)
+@router.callback_query(lambda c: c.data == "reject_changes", UserDataStates.CONFIRMING_CHANGES)
 async def reject_changes(callback_query: types.CallbackQuery, state: FSMContext):
     """
     Отклоняет изменения и возвращает пользователя к вводу имени.
     """
-    await state.set_state(UserDataStates.waiting_for_name)
+    await state.set_state(UserDataStates.WAITING_FOR_NAME)
     await callback_query.message.edit_text("❌ Изменение данных отменено. Введите ваше новое имя:")
 
 
