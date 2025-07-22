@@ -52,6 +52,7 @@ class MenuBuilder:
                 [
                     InlineKeyboardButton(text="Python", callback_data=CallbackData.LANGUAGE_PYTHON.value),
                     InlineKeyboardButton(text="C#", callback_data=CallbackData.LANGUAGE_CSHARP.value),
+                    InlineKeyboardButton(text="Java", callback_data=CallbackData.LANGUAGE_JAVA.value),
                 ],
             ]
         )

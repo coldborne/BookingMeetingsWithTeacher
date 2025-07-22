@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, TIMESTAMP
+from sqlalchemy import Column, Integer, String, TIMESTAMP, Boolean
 from sqlalchemy.sql import func
 
 from telegram.models.base import Base
@@ -14,13 +14,16 @@ class User(Base):
     language = Column(String(50), nullable=True)
     state = Column(String(255), nullable=True)
     created_at = Column(TIMESTAMP, server_default=func.now())
+    is_banned = Column(Boolean, nullable=False, default=False)
+    hour_rate = Column(Integer, nullable=False, default=0)
 
 
 class UserDTO:
     def __init__(self, telegram_id: int, name: str = None, surname: str = None,
-                 language: str = None, state: str = None):
+                 language: str = None, state: str = None, hour_rate: str = None):
         self.telegram_id = telegram_id
         self.name = name
         self.surname = surname
         self.language = language
         self.state = state
+        self.hour_rate = hour_rate

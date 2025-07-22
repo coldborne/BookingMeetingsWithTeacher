@@ -24,12 +24,17 @@ from telegram.utils.callback_data import CallbackData
 from telegram.utils.cryptographer import decrypt_telegram_id
 from telegram.utils.menu_builder import MenuBuilder
 from telegram.config.availability_days_config import AvailabilityDaysConfig
+from telegram.config.middlewares.ban_middleware import BanMiddleware
 
 logger = get_logger(__name__)
 
 bot = Bot(token=API_TOKEN)
 storage = MemoryStorage()
 dispatcher = Dispatcher(storage=storage)
+
+dispatcher.message.middleware(BanMiddleware())
+dispatcher.callback_query.middleware(BanMiddleware())
+
 router = Router()
 
 user_task_locks = defaultdict(Lock)
@@ -344,7 +349,7 @@ async def select_time(callback_query: types.CallbackQuery, state: FSMContext):
     end_time = (start_time_local + timedelta(hours=1)).astimezone(timezone("UTC"))
 
     is_success = await calDavService.book_slot(
-        summary=f"{user.name} {user.surname} ({user.language})",
+        summary=f"{user.name} {user.surname} {user.hour_rate} ({user.language})",
         start=start_time,
         end=end_time
     )

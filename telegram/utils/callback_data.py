@@ -7,6 +7,7 @@ class CallbackData(Enum):
     UPDATE_DATA = "change_data"
     LANGUAGE_PYTHON = "language_python"
     LANGUAGE_CSHARP = "language_C#"
+    LANGUAGE_JAVA = "language_java"
     FINISH_BOOKING = "finish_booking"
     IGNORE = "ignore"
     TIME_PREFIX = "time_"

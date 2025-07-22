@@ -26,7 +26,8 @@ class UserService:
                 name=user.name,
                 surname=user.surname,
                 language=user.language,
-                state=user.state
+                state=user.state,
+                hour_rate=user.hour_rate,
             )
 
         return None
