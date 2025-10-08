@@ -1,30 +1,29 @@
 import asyncio
 from asyncio import Lock
 from collections import defaultdict
-
 from datetime import date, datetime, timedelta
 from functools import wraps
 
-from pytz import timezone
-
-from aiogram import Bot, Dispatcher, types, Router
+from aiogram import Bot, Dispatcher, Router, types
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
-from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.fsm.state import State, StatesGroup
+from aiogram.fsm.storage.memory import MemoryStorage
+from pytz import timezone
 
-from telegram.config.consts import URL, USERNAME, APPLE_APP_PASSWORD, API_TOKEN, ADMIN_TELEGRAM_ID
-from telegram.handlers.user_data_handler import UserDataStates, UserDataHandler
+from telegram.config.availability_days_config import AvailabilityDaysConfig
+from telegram.config.consts import (ADMIN_TELEGRAM_ID, API_TOKEN,
+                                    APPLE_APP_PASSWORD, URL, USERNAME)
+from telegram.config.logging_config import get_logger
+from telegram.config.middlewares.ban_middleware import BanMiddleware
+from telegram.handlers.user_data_handler import UserDataHandler, UserDataStates
 from telegram.models.database import Database
 from telegram.models.models import User
 from telegram.services.cal_dav_service import CalDavService
-from telegram.config.logging_config import get_logger
 from telegram.services.user_service import UserService
 from telegram.utils.callback_data import CallbackData
 from telegram.utils.cryptographer import decrypt_telegram_id
 from telegram.utils.menu_builder import MenuBuilder
-from telegram.config.availability_days_config import AvailabilityDaysConfig
-from telegram.config.middlewares.ban_middleware import BanMiddleware
 
 logger = get_logger(__name__)
 

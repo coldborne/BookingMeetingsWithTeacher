@@ -1,5 +1,6 @@
 from calendar import monthrange
 from datetime import date, timedelta
+
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 from telegram.config.availability_days_config import AvailabilityDaysConfig

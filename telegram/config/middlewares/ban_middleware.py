@@ -6,6 +6,7 @@ from sqlalchemy import text
 from telegram.models.database import Database, logger
 from telegram.utils.cryptographer import encrypt_telegram_id
 
+
 class BanMiddleware(BaseMiddleware):
     async def __call__(self, handler, event, data):
         telegram_id = encrypt_telegram_id(event.from_user.id)

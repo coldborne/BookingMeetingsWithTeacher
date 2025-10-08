@@ -2,9 +2,10 @@ import asyncio
 import logging
 import threading
 import time
+
 from sqlalchemy import create_engine, text
 from sqlalchemy.exc import OperationalError, SQLAlchemyError
-from sqlalchemy.orm import sessionmaker, Session
+from sqlalchemy.orm import Session, sessionmaker
 
 from telegram.config.logging_config import get_logger
 

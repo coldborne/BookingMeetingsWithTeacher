@@ -1,14 +1,13 @@
 import logging
+import uuid
+from datetime import date, datetime
+from typing import Set
 
 import caldav
-import uuid
-
-from datetime import datetime, date
 from icalendar import Calendar, Event
-from typing import Set
 from pytz import timezone
 
-from telegram.config.consts import WORK_CALENDAR, STUDENT_WORK_CALENDAR
+from telegram.config.consts import STUDENT_WORK_CALENDAR, WORK_CALENDAR
 
 logger = logging.getLogger(__name__)
 

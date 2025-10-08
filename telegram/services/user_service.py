@@ -3,7 +3,6 @@ from sqlalchemy.exc import IntegrityError
 from telegram.config.logging_config import get_logger
 from telegram.models.database import Database
 from telegram.models.models import User, UserDTO
-
 from telegram.utils.cryptographer import encrypt_telegram_id
 
 logger = get_logger(__name__)

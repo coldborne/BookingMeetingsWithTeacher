@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, TIMESTAMP, Boolean
+from sqlalchemy import TIMESTAMP, Boolean, Column, Integer, String
 from sqlalchemy.sql import func
 
 from telegram.models.base import Base

@@ -1,4 +1,4 @@
-from aiogram.fsm.state import StatesGroup, State
+from aiogram.fsm.state import State, StatesGroup
 
 from telegram.config.logging_config import get_logger
 from telegram.services.user_service import UserService
