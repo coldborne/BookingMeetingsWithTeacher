@@ -42,40 +42,6 @@ class Database:
         """Запуск процесса подключения к БД"""
         await self.__reconnect()
 
-    async def __reconnect(self):
-        """
-        Попытка установить соединение с базой данных.
-        Если соединение не удается, повторяем попытку каждые 30 секунд асинхронно.
-        Если за 10 минут подключение не установлено, выбрасываем исключение.
-        """
-
-        start_time = time.time()
-        is_database_connect = False
-
-        while is_database_connect == False:
-            try:
-                self.__session = self.__session_factory()
-                await self.__execute('SELECT 1')
-                logger.info('✅ Успешное подключение к базе данных')
-                is_database_connect = True
-            except OperationalError as exception:
-                elapsed_time = time.time() - start_time
-
-                if elapsed_time > self.__MAX_WAITING_CONNECT_TIME:
-                    logger.error("❌ Не удалось подключиться к базе данных за 10 минут. Завершаем попытки.")
-                    raise RuntimeError("Не удалось подключиться к базе данных")
-
-                logger.warning(f"⚠ Ошибка подключения к БД: {exception}. Повторная попытка через 30 секунд...")
-                await asyncio.sleep(self.__WAITING_CONNECT_TIME)
-
-    async def __execute(self, query: str):
-        """
-        Выполнение SQL-запроса через `run_in_executor`.
-        """
-
-        asyncio_loop = asyncio.get_running_loop()
-        return await asyncio_loop.run_in_executor(None, self.__session.execute, text(query))
-
     async def get_session(self) -> Session:
         """
         Возвращает текущую сессию SQLAlchemy. Если сессия закрыта — создаем новую.
@@ -116,3 +82,37 @@ class Database:
             await self.rollback()
             logger.error(f"❌ Ошибка при выполнении запроса: {exception}")
             return None
+
+    async def __reconnect(self):
+        """
+        Попытка установить соединение с базой данных.
+        Если соединение не удается, повторяем попытку каждые 30 секунд асинхронно.
+        Если за 10 минут подключение не установлено, выбрасываем исключение.
+        """
+
+        start_time = time.time()
+        is_database_connect = False
+
+        while not is_database_connect:
+            try:
+                self.__session = self.__session_factory()
+                await self.__execute('SELECT 1')
+                logger.info('✅ Успешное подключение к базе данных')
+                is_database_connect = True
+            except OperationalError as exception:
+                elapsed_time = time.time() - start_time
+
+                if elapsed_time > self.__MAX_WAITING_CONNECT_TIME:
+                    logger.error("❌ Не удалось подключиться к базе данных за 10 минут. Завершаем попытки.")
+                    raise RuntimeError("Не удалось подключиться к базе данных")
+
+                logger.warning(f"⚠ Ошибка подключения к БД: {exception}. Повторная попытка через 30 секунд...")
+                await asyncio.sleep(self.__WAITING_CONNECT_TIME)
+
+    async def __execute(self, query: str):
+        """
+        Выполнение SQL-запроса через `run_in_executor`.
+        """
+
+        asyncio_loop = asyncio.get_running_loop()
+        return await asyncio_loop.run_in_executor(None, self.__session.execute, text(query))
