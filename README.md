@@ -44,23 +44,29 @@ Telegram Booking Bot with CalDAV Integration — это телеграм-бот 
 
 Установка и запуск
 1. Клонируйте репозиторий:
+   ```
    git clone https://github.com/coldborne/BookingMeetingsWithTeacher.git
    cd BookingMeetingsWithTeacher
+   ```
 
-2. Создайте виртуальное окружение и установите зависимости:
+3. Создайте виртуальное окружение и установите зависимости:
+   ```
    python -m venv venv
    source venv/bin/activate  # Для Linux/Mac
    venv\Scripts\activate     # Для Windows
    pip install -r requirements.txt
+   ```
 
-3. Настройте переменные окружения:
+4. Настройте переменные окружения:
    Создайте файл .env в корневой папке и добавьте следующие параметры:
+   ```
    API_TOKEN=<ваш_токен_бота>
    CALDAV_URL=https://caldav.icloud.com/
    CALDAV_USERNAME=<ваш_логин>
    CALDAV_APP_PASSWORD=<ваш_пароль_приложения>
+   ```
 
-4. Запустите бота:
+6. Запустите бота:
    python telegram_bot.py
 
 Структура проекта
@@ -82,14 +88,17 @@ Telegram Booking Bot with CalDAV Integration — это телеграм-бот 
 │   │   ├── __init__.py
 │   │   ├── menu_builder.py
 │   │   ├── callback_data.py
+│   │   ├── cryptographer.py
 │   ├── models/
 │   │   ├── __init__.py
 │   │   ├── database.py
 │   │   ├── models.py
+│   │   ├── base.py
 │   ├── config/
 │   │   ├── __init__.py
 │   │   ├── consts.py
 │   │   ├── logging_config.py
+│   │   ├── availability_days_config
 ├── main.py
 ```
 
