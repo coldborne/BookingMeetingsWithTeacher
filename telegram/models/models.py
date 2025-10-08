@@ -15,7 +15,7 @@ class User(Base):
     state = Column(String(255), nullable=True)
     created_at = Column(TIMESTAMP, server_default=func.now())
     is_banned = Column(Boolean, nullable=False, default=False)
-    hour_rate = Column(Integer, nullable=False, default=0)
+    hour_rate = Column(Integer, nullable=False, default=1500)
 
 
 class UserDTO:
