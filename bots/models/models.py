@@ -8,7 +8,7 @@ class User(Base):
     __tablename__ = "users"
 
     id = Column(Integer, primary_key=True, index=True)
-    telegram_id = Column(String, unique=True, nullable=False)
+    telegram_id = Column(String, unique=True, nullable=True)
     name = Column(String(255), nullable=True)
     surname = Column(String(255), nullable=True)
     language = Column(String(50), nullable=True)
@@ -19,11 +19,22 @@ class User(Base):
 
 
 class UserDTO:
-    def __init__(self, telegram_id: int, name: str = None, surname: str = None,
-                 language: str = None, state: str = None, hour_rate: str = None):
+    def __init__(
+        self,
+        id: int,
+        telegram_id: int | None = None,
+        name: str | None = None,
+        surname: str | None = None,
+        language: str | None = None,
+        state: str | None = None,
+        hour_rate: int | None = None,
+        is_banned: bool = False,
+    ):
+        self.id = id
         self.telegram_id = telegram_id
         self.name = name
         self.surname = surname
         self.language = language
         self.state = state
         self.hour_rate = hour_rate
+        self.is_banned = is_banned
