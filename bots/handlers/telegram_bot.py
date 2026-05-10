@@ -15,17 +15,20 @@ from bots.config.availability_days_config import AvailabilityDaysConfig
 from bots.config.consts import (ADMIN_TELEGRAM_ID, API_TOKEN,
                                 APPLE_APP_PASSWORD, URL, USERNAME)
 from bots.config.logging_config import get_logger
+from bots.config.platforms import Platforms
 from bots.middlewares.ban_middleware import BanMiddleware
 from bots.handlers.user_data_handler import UserDataHandler, UserDataStates
 from bots.models.database import Database
 from bots.models.models import User
 from bots.services.cal_dav_service import CalDavService
 from bots.services.user_service import UserService
+from bots.services.identity_service import IdentityService
+from bots.services.session_service import SessionService
 from bots.utils.callback_data import CallbackData
 from bots.utils.cryptographer import decrypt_telegram_id
 from bots.utils.main import is_date_available
 
-from bots.platforms.telegram.telegram_menu_builder import TelegramMenuBuilder
+from bots.platforms.telegram.menu_builder import MenuBuilder
 
 logger = get_logger(__name__)
 
@@ -48,6 +51,8 @@ database = Database()
 asyncio.run(database.connect())
 
 user_service = UserService(database)
+identity_service = IdentityService(database, user_service)
+session_service = SessionService(database)
 
 
 class UserStates(StatesGroup):
@@ -94,37 +99,47 @@ def task_handler(task_key_func=None):
 @router.message(Command("start"))
 @task_handler(task_key_func=lambda event, *args, **kwargs: f"{event.from_user.id}_start")
 async def start_command(message: types.Message, state: FSMContext):
-    """
-    Обрабатывает команду /start: приветствует пользователя, проверяет данные и перенаправляет на заполнение.
-    """
     await message.answer("Привет! Добро пожаловать в систему бронирования.")
-    await message.answer('ВАЖНО! Перед работой с ботом прочитайте подробности работы с ботом через команду /help. '
-                         'При продолжении работы с ботом вы автоматически подтверждаете согласие с данными подробностями')
+    await message.answer(
+        "ВАЖНО! Перед работой с ботом прочитайте подробности работы с ботом через команду /help. "
+        "При продолжении работы с ботом вы автоматически подтверждаете согласие с данными подробностями"
+    )
 
-    user_data_handler = UserDataHandler(user_service, message.from_user.id)
+    user = await identity_service.get_or_create_user_by_identity(
+        Platforms.TELEGRAM,
+        str(message.from_user.id),
+    )
 
+    if not user:
+        await message.answer("❌ Не удалось инициализировать пользователя. Попробуйте позже.")
+        return
+
+    user_data_handler = UserDataHandler(user_service, user.id)
     await user_data_handler.ensure_user_exists()
 
-    missing_state = await user_data_handler.get_missing_data_state()
-    first_missing_state = missing_state[0]
+    missing_state, _, _ = await user_data_handler.get_missing_data_state()
 
-    if first_missing_state == UserDataStates.WAITING_FOR_NAME:
-        await state.set_state(first_missing_state)
+    if missing_state == UserDataStates.WAITING_FOR_NAME:
+        await state.set_state(missing_state)
+        await session_service.set_state(user.id, Platforms.TELEGRAM, "WAITING_FOR_NAME", {})
         await message.answer("Ваши данные неполные. Пожалуйста, введите ваше имя.")
-    elif first_missing_state == UserDataStates.WAITING_FOR_SURNAME:
-        await state.set_state(first_missing_state)
+    elif missing_state == UserDataStates.WAITING_FOR_SURNAME:
+        await state.set_state(missing_state)
+        await session_service.set_state(user.id, Platforms.TELEGRAM, "WAITING_FOR_SURNAME", {})
         await message.answer("Ваши данные неполные. Пожалуйста, введите вашу фамилию.")
-    elif first_missing_state == UserDataStates.WAITING_FOR_LANGUAGE:
-        await state.set_state(first_missing_state)
+    elif missing_state == UserDataStates.WAITING_FOR_LANGUAGE:
+        await state.set_state(missing_state)
+        await session_service.set_state(user.id, Platforms.TELEGRAM, "WAITING_FOR_LANGUAGE", {})
         await message.answer(
             "Ваши данные неполные. Пожалуйста, выберите ваш язык программирования:",
-            reply_markup=MenuBuilder.generate_language_keyboard()
+            reply_markup=MenuBuilder.generate_language_keyboard(),
         )
     else:
         await state.clear()
+        await session_service.clear_state(user.id, Platforms.TELEGRAM)
         await message.answer(
             "Все данные заполнены. Добро пожаловать в главное меню!",
-            reply_markup=MenuBuilder.generate_main_menu()
+            reply_markup=MenuBuilder.generate_main_menu(),
         )
 
 
@@ -165,11 +180,19 @@ async def help_command(message: types.Message):
 @router.message(Command(str(CallbackData.UPDATE_DATA.value)))
 @router.callback_query(lambda c: c.data == "change_data")
 async def change_data_command(event: types.Message | types.CallbackQuery, state: FSMContext):
-    """
-    Запускает процесс изменения всех данных пользователя.
-    """
+    platform_user_id = str(event.from_user.id)
+    user = await identity_service.get_or_create_user_by_identity(Platforms.TELEGRAM, platform_user_id)
+
+    if not user:
+        if isinstance(event, types.Message):
+            await event.answer("❌ Не удалось инициализировать пользователя.")
+        else:
+            await event.message.edit_text("❌ Не удалось инициализировать пользователя.")
+        return
+
     await state.update_data(new_name=None, new_surname=None, new_language=None)
     await state.set_state(UserDataStates.WAITING_FOR_NAME)
+    await session_service.set_state(user.id, Platforms.TELEGRAM, "WAITING_FOR_NAME", {})
 
     if isinstance(event, types.Message):
         await event.answer("Введите ваше новое имя:")
@@ -238,17 +261,34 @@ async def process_language(callback_query: types.CallbackQuery, state: FSMContex
 
 @router.callback_query(lambda c: c.data == "confirm_changes", UserDataStates.CONFIRMING_CHANGES)
 async def confirm_changes(callback_query: types.CallbackQuery, state: FSMContext):
-    """
-    Подтверждает изменения и обновляет данные пользователя в базе данных.
-    """
-    user_data = await state.get_data()
-    name, surname, language = user_data["new_name"], user_data["new_surname"], user_data["new_language"]
+    user = await identity_service.get_user_by_identity(
+        Platforms.TELEGRAM,
+        str(callback_query.from_user.id),
+    )
 
-    await user_service.update_user(callback_query.from_user.id, name=name, surname=surname, language=language)
+    if not user:
+        await callback_query.message.edit_text("❌ Пользователь не найден.")
+        return
+
+    user_data = await state.get_data()
+    name = user_data["new_name"]
+    surname = user_data["new_surname"]
+    language = user_data["new_language"]
+
+    await user_service.update_user_by_id(
+        user.id,
+        name=name,
+        surname=surname,
+        language=language,
+    )
 
     await state.clear()
-    await callback_query.message.edit_text("✅ Данные успешно обновлены! Выберите действие:",
-                                           reply_markup=MenuBuilder.generate_main_menu())
+    await session_service.clear_state(user.id, Platforms.TELEGRAM)
+
+    await callback_query.message.edit_text(
+        "✅ Данные успешно обновлены! Выберите действие:",
+        reply_markup=MenuBuilder.generate_main_menu(),
+    )
 
 
 @router.callback_query(lambda c: c.data == "reject_changes", UserDataStates.CONFIRMING_CHANGES)
@@ -262,16 +302,23 @@ async def reject_changes(callback_query: types.CallbackQuery, state: FSMContext)
 
 @router.callback_query(lambda c: c.data == CallbackData.BOOK_EVENT.value)
 async def book_event(callback_query: types.CallbackQuery, state: FSMContext):
-    """
-    Обрабатывает нажатие на кнопку "Бронировать событие" и отображает календарь.
-    """
-    user_data_handler = UserDataHandler(user_service, callback_query.from_user.id)
+    user = await identity_service.get_or_create_user_by_identity(
+        Platforms.TELEGRAM,
+        str(callback_query.from_user.id),
+    )
+
+    if not user:
+        await callback_query.message.edit_text("❌ Не удалось инициализировать пользователя.")
+        return
+
+    user_data_handler = UserDataHandler(user_service, user.id)
     await user_data_handler.ensure_user_exists()
 
-    missing_state, missing_fields, first_missing_label = await user_data_handler.get_missing_data_state()
+    missing_state, _, first_missing_label = await user_data_handler.get_missing_data_state()
 
     if missing_state:
         await state.set_state(missing_state)
+        await session_service.set_state(user.id, Platforms.TELEGRAM, str(missing_state), {})
         await callback_query.message.edit_text(
             f"❌ Ваши данные неполные. Завершите их заполнение.\n"
             f"✍️ Введите: {first_missing_label}."
@@ -293,11 +340,8 @@ async def select_date(callback_query: types.CallbackQuery, state: FSMContext):
     selected_date = date(int(year), int(month), int(day))
 
     today = date.today()
-    start_available_date = today + timedelta(days=1)
-    end_available_date = start_available_date + timedelta(days=30)
 
-    if not (start_available_date <= selected_date <= end_available_date) or availability_days_config.is_date_blocked(
-            selected_date):
+    if is_date_available(selected_date, today):
         keyboard = MenuBuilder.generate_calendar_keyboard(today.year, today.month)
 
         await callback_query.message.edit_text(
@@ -308,6 +352,19 @@ async def select_date(callback_query: types.CallbackQuery, state: FSMContext):
         return
 
     await state.update_data(selected_date=str(selected_date))
+
+    user = await identity_service.get_user_by_identity(
+        Platforms.TELEGRAM,
+        str(callback_query.from_user.id),
+    )
+
+    if user:
+        await session_service.set_state(
+            user.id,
+            Platforms.TELEGRAM,
+            "SELECTING_TIME",
+            {"selected_date": str(selected_date)},
+        )
 
     busy_hours = calDavService.parse_calendar_events(
         calDavService.get_events_time_by_date(selected_date)
@@ -335,15 +392,31 @@ async def change_month(callback_query: types.CallbackQuery):
 @router.callback_query(lambda c: c.data.startswith(CallbackData.TIME_PREFIX.value))
 @task_handler(task_key_func=lambda event, *args, **kwargs: f"{event.from_user.id}_{event.data}")
 async def select_time(callback_query: types.CallbackQuery, state: FSMContext):
-    """
-    Обрабатывает выбор времени и бронирует слот.
-    """
     hour = int(callback_query.data.split("_")[1])
-    user_id = callback_query.from_user.id
 
-    user = await user_service.get_user_by_telegram_id(user_id)
+    user = await identity_service.get_user_by_identity(
+        Platforms.TELEGRAM,
+        str(callback_query.from_user.id),
+    )
+
+    if not user:
+        await callback_query.message.edit_text("❌ Пользователь не найден.")
+        return
+
     local_tz = timezone("Europe/Moscow")
-    selected_date = datetime.strptime((await state.get_data())["selected_date"], "%Y-%m-%d").date()
+
+    session_payload = await session_service.get_payload(user.id, Platforms.TELEGRAM)
+    selected_date_raw = session_payload.get("selected_date")
+
+    if not selected_date_raw:
+        fallback_state_data = await state.get_data()
+        selected_date_raw = fallback_state_data.get("selected_date")
+
+    if not selected_date_raw:
+        await callback_query.message.edit_text("❌ Не выбрана дата. Начните бронирование заново.")
+        return
+
+    selected_date = datetime.strptime(selected_date_raw, "%Y-%m-%d").date()
 
     start_time_local = local_tz.localize(datetime.combine(selected_date, datetime.min.time().replace(hour=hour)))
     start_time = start_time_local.astimezone(timezone("UTC"))
@@ -352,7 +425,7 @@ async def select_time(callback_query: types.CallbackQuery, state: FSMContext):
     is_success = await calDavService.book_slot(
         summary=f"{user.name} {user.surname} {user.hour_rate} ({user.language})",
         start=start_time,
-        end=end_time
+        end=end_time,
     )
 
     busy_hours = calDavService.parse_calendar_events(
@@ -367,20 +440,25 @@ async def select_time(callback_query: types.CallbackQuery, state: FSMContext):
         )
         await callback_query.message.edit_text(
             "Выберите время:",
-            reply_markup=keyboard
+            reply_markup=keyboard,
         )
     else:
         await callback_query.message.edit_text(
             f"Ошибка: время {hour}:00 уже занято на {selected_date}.",
-            reply_markup=keyboard
+            reply_markup=keyboard,
         )
 
 
 @router.callback_query(lambda c: c.data == CallbackData.FINISH_BOOKING.value)
 async def finish_booking(callback_query: types.CallbackQuery):
-    """
-    Завершает процесс бронирования и возвращает пользователя в главное меню.
-    """
+    user = await identity_service.get_user_by_identity(
+        Platforms.TELEGRAM,
+        str(callback_query.from_user.id),
+    )
+
+    if user:
+        await session_service.clear_state(user.id, Platforms.TELEGRAM)
+
     await callback_query.message.edit_text(
         "Бронирование завершено. Возвращаем вас в главное меню."
     )
@@ -388,7 +466,7 @@ async def finish_booking(callback_query: types.CallbackQuery):
     await bot.send_message(
         callback_query.from_user.id,
         "Выберите действие:",
-        reply_markup=MenuBuilder.generate_main_menu()
+        reply_markup=MenuBuilder.generate_main_menu(),
     )
 
 

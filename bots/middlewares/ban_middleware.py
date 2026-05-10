@@ -1,41 +1,32 @@
 from aiogram import BaseMiddleware
 from aiogram.dispatcher.event.bases import SkipHandler
 from aiogram.types import CallbackQuery
-from sqlalchemy import text
 
-from bots.models.database import Database, logger
-from bots.utils.cryptographer import encrypt_telegram_id
+from bots.config.logging_config import get_logger
+from bots.config.platforms import Platforms
+from bots.models.database import Database
+from bots.services.identity_service import IdentityService
+from bots.services.user_service import UserService
+
+logger = get_logger(__name__)
 
 
 class BanMiddleware(BaseMiddleware):
     async def __call__(self, handler, event, data):
-        telegram_id = encrypt_telegram_id(event.from_user.id)
         database = Database()
-
-        async def query():
-            session = await database.get_session()
-
-            try:
-                stmt = text(
-                    "SELECT is_banned "
-                    "FROM users "
-                    "WHERE telegram_id = :telegram_id "
-                    "LIMIT 1"
-                )
-                result = session.execute(stmt, {"telegram_id": telegram_id})
-                return result.scalar()
-            finally:
-                await database.close_session()
+        user_service = UserService(database)
+        identity_service = IdentityService(database, user_service)
 
         try:
-            result = await database.execute_with_retry(query)
-            is_banned = bool(result)
-            print(is_banned)
+            user = await identity_service.get_user_by_identity(
+                Platforms.TELEGRAM,
+                str(event.from_user.id),
+            )
         except Exception as exception:
             logger.error(f"❌ Не удалось проверить бан: {exception}")
-            is_banned = True
+            user = None
 
-        if is_banned:
+        if user and user.is_banned:
             text_for_user = "🚫 Бот недоступен."
 
             if isinstance(event, CallbackQuery):
