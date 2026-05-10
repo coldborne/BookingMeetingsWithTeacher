@@ -1,7 +1,7 @@
 from aiogram.fsm.state import State, StatesGroup
 
-from telegram.config.logging_config import get_logger
-from telegram.services.user_service import UserService
+from bots.config.logging_config import get_logger
+from bots.services.user_service import UserService
 
 logger = get_logger(__name__)
 

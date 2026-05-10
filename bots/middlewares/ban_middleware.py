@@ -3,8 +3,8 @@ from aiogram.dispatcher.event.bases import SkipHandler
 from aiogram.types import CallbackQuery
 from sqlalchemy import text
 
-from telegram.models.database import Database, logger
-from telegram.utils.cryptographer import encrypt_telegram_id
+from bots.models.database import Database, logger
+from bots.utils.cryptographer import encrypt_telegram_id
 
 
 class BanMiddleware(BaseMiddleware):

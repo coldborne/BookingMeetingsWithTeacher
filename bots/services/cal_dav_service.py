@@ -7,7 +7,7 @@ import caldav
 from icalendar import Calendar, Event
 from pytz import timezone
 
-from telegram.config.consts import STUDENT_WORK_CALENDAR, WORK_CALENDAR
+from bots.config.consts import STUDENT_WORK_CALENDAR, WORK_CALENDAR
 
 logger = logging.getLogger(__name__)
 

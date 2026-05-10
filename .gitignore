@@ -5,7 +5,7 @@
 .idea/
 
 # Чувствительные данные
-telegram/config/consts.py
+bots/config/consts.py
 
 # Лог файлы
 *.log

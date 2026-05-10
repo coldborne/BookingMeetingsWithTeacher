@@ -3,7 +3,7 @@ import base64
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 
-from telegram.config.consts import SECRET_KEY
+from bots.config.consts import SECRET_KEY
 
 
 def encrypt_telegram_id(telegram_id: int) -> str:

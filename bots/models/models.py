@@ -1,7 +1,7 @@
 from sqlalchemy import TIMESTAMP, Boolean, Column, Integer, String
 from sqlalchemy.sql import func
 
-from telegram.models.base import Base
+from bots.models.base import Base
 
 
 class User(Base):

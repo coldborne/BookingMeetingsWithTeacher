@@ -1,6 +1,6 @@
 import asyncio
-from telegram.config.logging_config import get_logger
-from telegram.handlers.telegram_bot import main as start_telegram_bot
+from bots.config.logging_config import get_logger
+from bots.handlers.telegram_bot import main as start_telegram_bot
 
 logger = get_logger(__name__)
 

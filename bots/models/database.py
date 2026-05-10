@@ -7,7 +7,7 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.exc import OperationalError, SQLAlchemyError
 from sqlalchemy.orm import Session, sessionmaker
 
-from telegram.config.logging_config import get_logger
+from bots.config.logging_config import get_logger
 
 logger = get_logger(__name__)
 

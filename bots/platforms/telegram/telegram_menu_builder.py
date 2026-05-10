@@ -3,8 +3,8 @@ from datetime import date, timedelta
 
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
-from telegram.config.availability_days_config import AvailabilityDaysConfig
-from telegram.utils.callback_data import CallbackData
+from bots.config.availability_days_config import AvailabilityDaysConfig
+from bots.utils.callback_data import CallbackData
 
 availability_config = AvailabilityDaysConfig()
 

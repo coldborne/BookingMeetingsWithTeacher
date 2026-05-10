@@ -11,19 +11,21 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.storage.memory import MemoryStorage
 from pytz import timezone
 
-from telegram.config.availability_days_config import AvailabilityDaysConfig
-from telegram.config.consts import (ADMIN_TELEGRAM_ID, API_TOKEN,
-                                    APPLE_APP_PASSWORD, URL, USERNAME)
-from telegram.config.logging_config import get_logger
-from telegram.config.middlewares.ban_middleware import BanMiddleware
-from telegram.handlers.user_data_handler import UserDataHandler, UserDataStates
-from telegram.models.database import Database
-from telegram.models.models import User
-from telegram.services.cal_dav_service import CalDavService
-from telegram.services.user_service import UserService
-from telegram.utils.callback_data import CallbackData
-from telegram.utils.cryptographer import decrypt_telegram_id
-from telegram.utils.menu_builder import MenuBuilder
+from bots.config.availability_days_config import AvailabilityDaysConfig
+from bots.config.consts import (ADMIN_TELEGRAM_ID, API_TOKEN,
+                                APPLE_APP_PASSWORD, URL, USERNAME)
+from bots.config.logging_config import get_logger
+from bots.middlewares.ban_middleware import BanMiddleware
+from bots.handlers.user_data_handler import UserDataHandler, UserDataStates
+from bots.models.database import Database
+from bots.models.models import User
+from bots.services.cal_dav_service import CalDavService
+from bots.services.user_service import UserService
+from bots.utils.callback_data import CallbackData
+from bots.utils.cryptographer import decrypt_telegram_id
+from bots.utils.main import is_date_available
+
+from bots.platforms.telegram.telegram_menu_builder import TelegramMenuBuilder
 
 logger = get_logger(__name__)
 
